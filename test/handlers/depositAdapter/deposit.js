@@ -97,15 +97,15 @@ contract("DepositAdapter", async (accounts) => {
     const signature = "0x123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456";
     const deposit_data_root = Helpers.toHex("0x11", 32);
 
+    const abiCoder = Ethers.utils.defaultAbiCoder;
+    const executionData = abiCoder.encode([ "bytes", "bytes", "bytes", "bytes32" ], [ pubkey, withdrawal_credentials, signature, deposit_data_root ]);
+
     // Origin deposit
 
     const res = await depositAdapterOriginInstance.deposit(
       destinationDomainID,
       resourceID,
-      pubkey,
-      withdrawal_credentials,
-      signature,
-      deposit_data_root, {value: Ethers.utils.parseEther("4")});
+      executionData, "0x", {value: Ethers.utils.parseEther("4")});
 
     console.log(res.receipt);
 

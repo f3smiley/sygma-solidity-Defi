@@ -64,20 +64,20 @@ contract DepositAdapterOrigin is AccessControl {
     function deposit(
         uint8 destinationDomainID,
         bytes32 resourceID,
-        bytes calldata pubkey,
-        bytes calldata withdrawal_credentials,
-        bytes calldata signature,
-        bytes32 deposit_data_root
+        bytes calldata depositContractCalldata,
+        bytes calldata feeData
     ) external payable {
         // Collect fee
         require(msg.value >= _depositFee, "Incorrect fee supplied");
         // Check input data
-        require(pubkey.length == 48, "DepositContract: invalid pubkey length");
-        require(withdrawal_credentials.length == 32, "DepositContract: invalid withdrawal_credentials length");
-        require(signature.length == 96, "DepositContract: invalid signature length");
-        // Verify withdrawal_credentials
-        bytes32 credentials = bytes32(abi.encodePacked(bytes12(0x010000000000000000000000), _targetDepositAdapter));
-        require(credentials == bytes32(withdrawal_credentials[:32]), "Wrong withdrawal_credentials");
+        bytes memory withdrawal_credentials;
+        (, withdrawal_credentials, ,) = abi.decode(depositContractCalldata, (bytes, bytes, bytes, bytes32));
+        require(withdrawal_credentials.length == 32,
+            "DepositContract: invalid withdrawal_credentials length");
+        bytes32 credentials = bytes32(withdrawal_credentials);
+        address depositAdapter = _targetDepositAdapter;
+        require(credentials == bytes32(abi.encodePacked(hex"010000000000000000000000", depositAdapter)),
+            "DepositContract: wrong withdrawal_credentials address");
         // TODO: deposit to bridge
         
     //       maxFee:                       uint256  bytes  0                                                                                           -  32
@@ -88,9 +88,7 @@ contract DepositAdapterOrigin is AccessControl {
     //       len(executionDataDepositor):  uint8    bytes  35 + len(executeFuncSignature) + len(executeContractAddress)                                -  36 + len(executeFuncSignature) + len(executeContractAddress)
     //       executionDataDepositor:       bytes    bytes  36 + len(executeFuncSignature) + len(executeContractAddress)                                -  36 + len(executeFuncSignature) + len(executeContractAddress) + len(executionDataDepositor)
     //       executionData:                bytes    bytes  36 + len(executeFuncSignature) + len(executeContractAddress) + len(executionDataDepositor)  -  END
-        address executeContractAddress = _targetDepositAdapter;
-        bytes memory executionData = abi.encode(pubkey, withdrawal_credentials, signature, deposit_data_root);
-        bytes memory depositData = abi.encodePacked(uint256(0), uint16(4), IDepositAdapterTarget(address(0)).execute.selector, uint8(20), executeContractAddress, uint8(32), uint256(uint160(address(this))), executionData);
-        IBridge(_bridgeAddress).deposit{value: msg.value - _depositFee}(destinationDomainID, resourceID, depositData, "0x");
+        bytes memory depositData = abi.encodePacked(uint256(0), uint16(4), IDepositAdapterTarget(address(0)).execute.selector, uint8(20), _targetDepositAdapter, uint8(32), uint256(uint160(address(this))), depositContractCalldata);
+        IBridge(_bridgeAddress).deposit{value: msg.value - _depositFee}(destinationDomainID, resourceID, depositData, feeData);
     }
 }
