@@ -1,21 +1,20 @@
-// The Licensed Work is (c) 2022 Sygma
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity 0.8.11;
 
 import "../../utils/AccessControl.sol";
 import "../../interfaces/IHandler.sol";
 import "../../interfaces/IDepositContract.sol";
+import "../../interfaces/IDepositAdapterTarget.sol";
 
 /**
     @title Makes deposits to Goerli deposit contract.
     @author ChainSafe Systems.
     @notice This contract is intended to be used with the Bridge contract and Generic handler.
  */
-contract DepositAdapterTarget is AccessControl {
-    address public constant _depositContract = 0xff50ed3d0ec03aC01D4C79aAd74928BFF48a7b2b;
+contract DepositAdapterTarget is AccessControl, IDepositAdapterTarget {
+    address payable public constant _depositContract = payable(0xff50ed3d0ec03aC01D4C79aAd74928BFF48a7b2b);
 
     address public immutable _handlerAddress;
-    address public immutable _bridgeAddress;
     address public _depositAdapterOrigin;
 
     event DepositAdapterOriginChanged(
@@ -47,12 +46,11 @@ contract DepositAdapterTarget is AccessControl {
     }
 
     /**
-        @param bridgeAddress Contract address of previously deployed Bridge.
         @param handlerAddress Contract address of previously deployed generic handler.
      */
-    constructor(address bridgeAddress, address handlerAddress) public {
-        _bridgeAddress = bridgeAddress;
+    constructor(address handlerAddress) public {
         _handlerAddress = handlerAddress;
+        // require(address(_depositContract).code.length > 0, "Invalid deposit contract");
         _setupRole(DEFAULT_ADMIN_ROLE, msg.sender);
     }
 
@@ -67,18 +65,28 @@ contract DepositAdapterTarget is AccessControl {
         emit DepositAdapterOriginChanged(depositAdapterOrigin);
     }
 
-    fallback(bytes calldata depositData) external onlyHandler {
-        //  maxFee:                             uint256  bytes  0                                                             -  32
-        //   len(executeFuncSignature):          uint16   bytes  32                                                            -  34
-        //   executeFuncSignature:               bytes    bytes  34                                                            -  34 + len(executeFuncSignature)
-        //   len(executeContractAddress):        uint8    bytes  34 + len(executeFuncSignature)                                -  35 + len(executeFuncSignature)
-        //   executeContractAddress              bytes    bytes  35 + len(executeFuncSignature)                                -  35 + len(executeFuncSignature) + len(executeContractAddress)
-        //   len(executionDataDepositor):        uint8    bytes  35 + len(executeFuncSignature) + len(executeContractAddress)  -  36 + len(executeFuncSignature) + len(executeContractAddress)
-        //   executionDataDepositorWithData:     bytes    bytes  36 + len(executeFuncSignature) + len(executeContractAddress)  -  END
-        // TODO: check that depositor is origin adapter
+    //   len(executionDataDepositor):        uint8    bytes  0 - 1
+    //   executionDataDepositor:             bytes    bytes  1 - 1 + len(executionDataDepositor)
+    //   executionData:                      bytes    bytes  1 + len(executionDataDepositor) -  END
+    function execute(bytes calldata executeData) external onlyHandler {
+        uint actualDepositorLen = uint8(bytes1(executeData[0:1]));
+        require(actualDepositorLen == 20, "Invalid origin depositor length");
+        address actualDepositor = address(uint160(bytes20(executeData[1:21])));
+        require(actualDepositor == _depositAdapterOrigin, "Invalid origin depositor");
 
-        // TODO: check that withdrawal address is this
-        // TODO: deposit to depositContract
+        bytes calldata depositData = executeData[21:];
+        require(IDepositContract(address(0)).deposit.selector == bytes4(depositData[0:4]),
+            "DepositContract: invalid deposit signature");
+        bytes memory withdrawal_credentials;
+        (, withdrawal_credentials, ,) = abi.decode(depositData[4:], (bytes, bytes, bytes, bytes32));
+        require(withdrawal_credentials.length == 32,
+            "DepositContract: invalid withdrawal_credentials length");
+        bytes32 credentials = bytes32(withdrawal_credentials);
+        require(credentials == bytes32(abi.encodePacked(hex"010000000000000000000000", address(this))),
+            "DepositContract: wrong withdrawal_credentials address");
+
+        (bool success, ) = _depositContract.call{value: 32 ether}(depositData);
+        require(success, "DepositContract: deposit failed");
     }
 
     /**
@@ -88,17 +96,13 @@ contract DepositAdapterTarget is AccessControl {
     }
 
     /**
-        @notice Transfers eth in the contract to the specified addresses. The parameters addrs and amounts are mapped 1-1.
-        This means that the address at index 0 for addrs will receive the amount (in WEI) from amounts at index 0.
-        @param addrs Array of addresses to transfer {amounts} to.
-        @param amounts Array of amounts to transfer to {addrs}.
+        @notice Transfers eth in the contract to the admin.
+        @param amount Amount to transfer.
      */
-    function withdraw(address payable[] calldata addrs, uint[] calldata amounts) external onlyAdmin {
-        require(addrs.length == amounts.length, "addrs[], amounts[]: diff length");
-        for (uint256 i = 0; i < addrs.length; i++) {
-            (bool success,) = addrs[i].call{value: amounts[i]}("");
-            require(success, "Withdrawal failed");
-            emit Withdrawal(addrs[i], amounts[i]);
-        }
+    function withdraw(uint amount) external onlyAdmin {
+        require(address(this).balance >= amount, "Not enough balance");
+        (bool success,) = msg.sender.call{value: amount}("");
+        require(success, "Withdrawal failed");
+        emit Withdrawal(msg.sender, amount);
     }
 }

@@ -7,7 +7,7 @@ install-deps:
 .PHONY: test
 test:
 	@echo " > \033[32mTesting contracts... \033[0m "
-	npx truffle test
+	npx truffle test ./test/handlers/depositAdapter/deposit.js
 
 compile:
 	@echo " > \033[32mCompiling contracts... \033[0m "

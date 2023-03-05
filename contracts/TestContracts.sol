@@ -6,6 +6,7 @@ import "@openzeppelin/contracts/token/ERC20/extensions/ERC20Wrapper.sol";
 import "@openzeppelin/contracts/token/ERC20/presets/ERC20PresetMinterPauser.sol";
 import "./handlers/ERCHandlerHelpers.sol";
 import "./interfaces/IERC20Plus.sol";
+import "./interfaces/IDepositContract.sol";
 
 contract NoArgument {
     event NoArgumentCalled();
@@ -169,5 +170,17 @@ contract ERC20PresetMinterPauserDecimals is ERC20PresetMinterPauser {
 
     function decimals() public view virtual override(ERC20) returns (uint8) {
         return customDecimals;
+    }
+}
+
+contract TestDepositContract is IDepositContract {
+    event Deposited(address depositor);
+    function deposit(
+        bytes calldata pubkey,
+        bytes calldata withdrawal_credentials,
+        bytes calldata signature,
+        bytes32 deposit_data_root
+    ) override external payable {
+        emit Deposited(msg.sender);
     }
 }
