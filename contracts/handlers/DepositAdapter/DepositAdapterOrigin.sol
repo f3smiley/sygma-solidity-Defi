@@ -14,6 +14,7 @@ import "../../interfaces/IDepositAdapterTarget.sol";
  */
 contract DepositAdapterOrigin is AccessControl {
     IBridge public immutable _bridgeAddress;
+    bytes32 public immutable _resourceID;
     address public _targetDepositAdapter;
     uint256 public _depositFee;
 
@@ -33,8 +34,9 @@ contract DepositAdapterOrigin is AccessControl {
     /**
         @param bridgeAddress Contract address of previously deployed Bridge.
      */
-    constructor(IBridge bridgeAddress) public {
+    constructor(IBridge bridgeAddress, bytes32 resourceID) public {
         _bridgeAddress = bridgeAddress;
+        _resourceID = resourceID;
         _depositFee = 3.2 ether;
         _setupRole(DEFAULT_ADMIN_ROLE, msg.sender);
     }
@@ -63,7 +65,6 @@ contract DepositAdapterOrigin is AccessControl {
 
     function deposit(
         uint8 destinationDomainID,
-        bytes32 resourceID,
         bytes calldata depositContractCalldata,
         bytes calldata feeData
     ) external payable {
@@ -97,6 +98,6 @@ contract DepositAdapterOrigin is AccessControl {
             uint8(32),
             abi.encode(address(this), depositContractCalldata)
         );
-        IBridge(_bridgeAddress).deposit{value: msg.value - _depositFee}(destinationDomainID, resourceID, depositData, feeData);
+        IBridge(_bridgeAddress).deposit{value: msg.value - _depositFee}(destinationDomainID, _resourceID, depositData, feeData);
     }
 }

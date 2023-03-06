@@ -172,15 +172,3 @@ contract ERC20PresetMinterPauserDecimals is ERC20PresetMinterPauser {
         return customDecimals;
     }
 }
-
-contract TestDepositContract is IDepositContract {
-    event Deposited(address depositor);
-    function deposit(
-        bytes calldata pubkey,
-        bytes calldata withdrawal_credentials,
-        bytes calldata signature,
-        bytes32 deposit_data_root
-    ) override external payable {
-        emit Deposited(msg.sender);
-    }
-}
