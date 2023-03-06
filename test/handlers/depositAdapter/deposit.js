@@ -9,10 +9,12 @@ const Helpers = require("../../helpers");
 
 const DepositAdapterOriginContract = artifacts.require("DepositAdapterOrigin");
 const DepositAdapterTargetContract = artifacts.require("DepositAdapterTarget");
+const IDepositContract = artifacts.require("IDepositContract");
 const PermissionlessGenericHandlerContract = artifacts.require(
   "PermissionlessGenericHandler"
 );
 const BasicFeeHandlerContract = artifacts.require("BasicFeeHandler");
+const TestTargetContract = artifacts.require("TestTarget");
 
 let BridgeInstance;
 let PermissionlessGenericHandlerInstance;
@@ -30,13 +32,15 @@ contract("DepositAdapter", async (accounts) => {
   });
 
   it("Deploy and configure depositAdapterOrigin and depositAdapterTarget", async () => {
+    const testTargetInstance = await TestTargetContract.new();
+
     const depositAdapterOriginInstance 
       = await DepositAdapterOriginContract.new(BridgeInstance.address);
     assert.equal(await depositAdapterOriginInstance._bridgeAddress(), BridgeInstance.address);
     assert.equal(await depositAdapterOriginInstance._depositFee(), Ethers.utils.parseEther("3.2").toString());
 
     const depositAdapterTargetInstance
-    = await DepositAdapterTargetContract.new(PermissionlessGenericHandlerInstance.address);
+    = await DepositAdapterTargetContract.new(PermissionlessGenericHandlerInstance.address, testTargetInstance.address);
     assert.equal(await depositAdapterTargetInstance._handlerAddress(), PermissionlessGenericHandlerInstance.address);
 
     await depositAdapterOriginInstance.changeTargetAdapter(depositAdapterTargetInstance.address);
@@ -47,6 +51,7 @@ contract("DepositAdapter", async (accounts) => {
   });
 
   it("Deposit", async () => {
+    const testTargetInstance = await TestTargetContract.new();
 
     const depositAdapterOriginInstance 
       = await DepositAdapterOriginContract.new(BridgeInstance.address);
@@ -61,11 +66,15 @@ contract("DepositAdapter", async (accounts) => {
     await PermissionlessGenericHandlerContract.new(destBridgeInstance.address);
 
     const depositAdapterTargetInstance
-    = await DepositAdapterTargetContract.new(destPermissionlessGenericHandlerInstance.address);
+    = await DepositAdapterTargetContract.new(destPermissionlessGenericHandlerInstance.address, testTargetInstance.address);
     assert.equal(await depositAdapterTargetInstance._handlerAddress(), destPermissionlessGenericHandlerInstance.address);
+
+    await depositAdapterTargetInstance.sendTransaction({value: Ethers.utils.parseEther("32")});
 
     await depositAdapterOriginInstance.changeTargetAdapter(depositAdapterTargetInstance.address);
     assert.equal(await depositAdapterOriginInstance._targetDepositAdapter(), depositAdapterTargetInstance.address);
+
+    await depositAdapterTargetInstance.changeOriginAdapter(depositAdapterOriginInstance.address);
 
     const resourceID = "0x0000000000000000000000000000000000000000000000000000000000000500";
     const ZERO_Address = "0x0000000000000000000000000000000000000000";
@@ -107,13 +116,10 @@ contract("DepositAdapter", async (accounts) => {
       resourceID,
       executionData, "0x", {value: Ethers.utils.parseEther("4")});
 
-    console.log(res.receipt);
-
     const internalTx = await TruffleAssert.createTransactionResult(
       BridgeInstance,
       res.tx
     );
-    console.log(internalTx.logs[0].args[4]);
     const depositData = internalTx.logs[0].args[4];
 
     TruffleAssert.eventEmitted(internalTx, "Deposit", (event) => {
@@ -162,6 +168,14 @@ contract("DepositAdapter", async (accounts) => {
       from: relayer1Address,
     });
 
-    assert.equal(1, 2);
+    const callData = await testTargetInstance.data();
+    const calls = await testTargetInstance.calls();
+    const targetContractBalance = await web3.eth.getBalance(
+      testTargetInstance.address
+    );
+
+    assert.equal(targetContractBalance, Ethers.utils.parseEther("32").toString());
+    assert.equal(calls, 1);
+    assert.equal(callData.slice(10), executionData.slice(2));
   });
 });

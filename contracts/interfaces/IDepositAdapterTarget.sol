@@ -3,5 +3,5 @@
 pragma solidity 0.8.11;
 
 interface IDepositAdapterTarget {
-    function execute(bytes calldata executeData) external;
+    function execute(address originDepositor, bytes calldata depositData) external;
 }

@@ -88,7 +88,15 @@ contract DepositAdapterOrigin is AccessControl {
     //       len(executionDataDepositor):  uint8    bytes  35 + len(executeFuncSignature) + len(executeContractAddress)                                -  36 + len(executeFuncSignature) + len(executeContractAddress)
     //       executionDataDepositor:       bytes    bytes  36 + len(executeFuncSignature) + len(executeContractAddress)                                -  36 + len(executeFuncSignature) + len(executeContractAddress) + len(executionDataDepositor)
     //       executionData:                bytes    bytes  36 + len(executeFuncSignature) + len(executeContractAddress) + len(executionDataDepositor)  -  END
-        bytes memory depositData = abi.encodePacked(uint256(0), uint16(4), IDepositAdapterTarget(address(0)).execute.selector, uint8(20), _targetDepositAdapter, uint8(32), uint256(uint160(address(this))), depositContractCalldata);
+        bytes memory depositData = abi.encodePacked(
+            uint256(0),
+            uint16(4),
+            IDepositAdapterTarget(address(0)).execute.selector,
+            uint8(20),
+            _targetDepositAdapter,
+            uint8(32),
+            abi.encode(address(this), depositContractCalldata)
+        );
         IBridge(_bridgeAddress).deposit{value: msg.value - _depositFee}(destinationDomainID, resourceID, depositData, feeData);
     }
 }

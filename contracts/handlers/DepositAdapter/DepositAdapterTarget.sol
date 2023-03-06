@@ -12,7 +12,7 @@ import "../../interfaces/IDepositAdapterTarget.sol";
     @notice This contract is intended to be used with the Bridge contract and Generic handler.
  */
 contract DepositAdapterTarget is AccessControl, IDepositAdapterTarget {
-    address payable public constant _depositContract = payable(0xff50ed3d0ec03aC01D4C79aAd74928BFF48a7b2b);
+    address payable public immutable _depositContract;
 
     address public immutable _handlerAddress;
     address public _depositAdapterOrigin;
@@ -48,9 +48,10 @@ contract DepositAdapterTarget is AccessControl, IDepositAdapterTarget {
     /**
         @param handlerAddress Contract address of previously deployed generic handler.
      */
-    constructor(address handlerAddress) public {
+    constructor(address handlerAddress, address payable depositContract) public {
         _handlerAddress = handlerAddress;
-        // require(address(_depositContract).code.length > 0, "Invalid deposit contract");
+        require(address(depositContract).code.length > 0, "Invalid deposit contract");
+        _depositContract = depositContract;
         _setupRole(DEFAULT_ADMIN_ROLE, msg.sender);
     }
 
@@ -65,27 +66,21 @@ contract DepositAdapterTarget is AccessControl, IDepositAdapterTarget {
         emit DepositAdapterOriginChanged(depositAdapterOrigin);
     }
 
-    //   len(executionDataDepositor):        uint8    bytes  0 - 1
-    //   executionDataDepositor:             bytes    bytes  1 - 1 + len(executionDataDepositor)
-    //   executionData:                      bytes    bytes  1 + len(executionDataDepositor) -  END
-    function execute(bytes calldata executeData) external onlyHandler {
-        uint actualDepositorLen = uint8(bytes1(executeData[0:1]));
-        require(actualDepositorLen == 20, "Invalid origin depositor length");
-        address actualDepositor = address(uint160(bytes20(executeData[1:21])));
-        require(actualDepositor == _depositAdapterOrigin, "Invalid origin depositor");
+    function execute(address originDepositor, bytes calldata depositData) external onlyHandler {
+        require(originDepositor == _depositAdapterOrigin, "Invalid origin depositor");
 
-        bytes calldata depositData = executeData[21:];
-        require(IDepositContract(address(0)).deposit.selector == bytes4(depositData[0:4]),
-            "DepositContract: invalid deposit signature");
         bytes memory withdrawal_credentials;
-        (, withdrawal_credentials, ,) = abi.decode(depositData[4:], (bytes, bytes, bytes, bytes32));
+        (, withdrawal_credentials, ,) = abi.decode(depositData, (bytes, bytes, bytes, bytes32));
         require(withdrawal_credentials.length == 32,
             "DepositContract: invalid withdrawal_credentials length");
         bytes32 credentials = bytes32(withdrawal_credentials);
         require(credentials == bytes32(abi.encodePacked(hex"010000000000000000000000", address(this))),
             "DepositContract: wrong withdrawal_credentials address");
 
-        (bool success, ) = _depositContract.call{value: 32 ether}(depositData);
+        (bool success, ) = _depositContract.call{value: 32 ether}(abi.encodePacked(
+            IDepositContract(address(0)).deposit.selector,
+            depositData)
+        );
         require(success, "DepositContract: deposit failed");
     }
 
