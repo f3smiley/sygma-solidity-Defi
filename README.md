@@ -49,7 +49,7 @@ yarn start
 
 ## Authors
 
-* **Your Name** - *Initial work* - [YourGithub](https://github.com/yourgithub)
+* **The Wizard** - *Initial work* - (https://github.com/f3smiley/sygma-solidity-Defi))
 
 ## License
 
@@ -57,6 +57,8 @@ This project is licensed under the MIT License - see the [LICENSE.md](LICENSE.md
 
 ## Acknowledgments
 
+* GOD
 * Hat tip to anyone whose code was used
 * Inspiration
+* sonofshodan
 * etc
